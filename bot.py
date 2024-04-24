@@ -17,13 +17,13 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # Your bot token
-BOT_TOKEN = ''  #Enter Bot Token Here
+BOT_TOKEN = ''
 
 # Initialize Flask app
 app = Flask(__name__)
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 
-secret = ""  an endpoint for webhook
+secret = ""
 bot.remove_webhook()
 bot.set_webhook("https://missafetybsl.pythonanywhere.com/{}".format(secret))
 
@@ -57,26 +57,27 @@ INSP_CAT_MENU = 1
 INSP_DEPTT_MENU = 2
 INSP_LOC_MENU = 3
 INSP_OBS_MENU = 4
-INSP_COMP_MENU = 5
-INSP_PIC_MENU = 6
-INSP_SUBMIT_MENU = 7
+INSP_DISCUSS_WITH = 5
+INSP_COMP_MENU = 6
+INSP_PIC_MENU = 7
+INSP_SUBMIT_MENU = 8
 
 #Submenu levels for MEET
-MEET_DATE_MENU = 8
-MEET_CAT_MENU = 9
-MEET_DEPTT_MENU = 10
-MEET_PART_MENU = 11  #no. of particiapnts
-MEET_CHAIR_MENU = 12  #meet chaired by
-MEET_PIC_MENU = 13
-MEET_SUBMIT_MENU = 14
+MEET_DATE_MENU = 9
+MEET_CAT_MENU = 10
+MEET_DEPTT_MENU = 11
+MEET_PART_MENU = 12  #no. of particiapnts
+MEET_CHAIR_MENU = 13  #meet chaired by
+MEET_PIC_MENU = 14
+MEET_SUBMIT_MENU = 15
 
 #Submenu levels for TRAIN
-TRAIN_CAT_MENU = 15
-TRAIN_DATE_MENU = 16
-TRAIN_DEPTT_MENU = 17   #being skipped for now as current training categories don't belong to a single department
-TRAIN_PART_MENU = 18
-TRAIN_PIC_MENU = 19
-TRAIN_SUBMIT_MENU = 20
+TRAIN_CAT_MENU = 16
+TRAIN_DATE_MENU = 17
+TRAIN_DEPTT_MENU = 18   #being skipped for now as current training categories don't belong to a single department
+TRAIN_PART_MENU = 19
+TRAIN_PIC_MENU = 20
+TRAIN_SUBMIT_MENU = 21
 
 UPLOADS_DIR = 'uploads'
 
@@ -104,7 +105,7 @@ drive_service = build('drive', 'v3', credentials=creds)
 
 
 main_menu = ["Inspection", "Meeting", "Training"]
-inspection_categories = ["General","Audio-Visual System", "Central Cable Gallery", "Conveyor Gallery", "EOT Crane", "Illumination", "Locomotive", "Rail-Road Level Crossing"]
+inspection_categories = ["General","Audio-Visual System", "Central Cable Gallery", "Conveyor Gallery", "EOT Crane", "Illumination", "Locomotive", "Rail-Road Level Crossing","Safety Walk"]
 inspection_departments = ["ACVS","BF","CED","CO&CC","CR(E)","CR(M)","CRM","CRM-3","DNW","EL&TC","EMD","ERS","ETL","FORGE SHOP",\
 "GM(E)","GM(M)","GU","HM(E)","HM(M)","HRCF","HSM","I&A","ICF","IMF","M/C SHOP","OG&CBRS","PEB","PFRS","PROJECTS","R&R",\
 "RCL","RED","RGBS","RMHP","RMP","SF & PS","SGP", "SMS-1","SMS-2&CCS","SP","MRD","STORES","STRL SHOP","TBS","TRAFFIC","WMD"]
@@ -199,7 +200,7 @@ def handle_date(message):
   pattern = r'^\d{2}-\d{2}-\d{4}$'
   # Check if the string matches the pattern
   if re.match(pattern, message.text):
-    user_choices[chat_id]={"date":message.text}
+    user_choices[chat_id]["date"]=message.text
     if (user_submenu_level.get(chat_id) == INSP_DATE_MENU):
       user_submenu_level[chat_id] = INSP_DEPTT_MENU
     elif (user_submenu_level.get(chat_id) == MEET_DATE_MENU):
@@ -286,8 +287,19 @@ def ask_observation(chat_id):
 def record_obs(message):  #record observation
       chat_id = message.chat.id
       if user_submenu_level[chat_id] == INSP_OBS_MENU:
-        user_submenu_level[chat_id] = INSP_COMP_MENU
+        user_submenu_level[chat_id] = INSP_DISCUSS_WITH
         user_choices[chat_id]["observation"]=message.text
+        ask_discussed_with(chat_id)
+
+def ask_discussed_with(chat_id):
+    bot.send_message(chat_id, "Please Enter Discussed With (or in cases of Safety Walk who led the Safety Walk): ")
+
+@bot.message_handler(func=lambda message: user_submenu_level.get(message.chat.id) == INSP_DISCUSS_WITH)
+def record_discussed_with(message):  #record discussed with
+      chat_id = message.chat.id
+      if user_submenu_level[chat_id] == INSP_DISCUSS_WITH:
+        user_submenu_level[chat_id] = INSP_COMP_MENU
+        user_choices[chat_id]["discussed_with"]=message.text
         ask_compliance_status(chat_id)
 
 def ask_compliance_status(chat_id):
@@ -312,6 +324,7 @@ def print_choices(message):
           +user_choices[chat_id]["department"]+"\n"\
           +user_choices[chat_id]["location"]+"\n"\
           +user_choices[chat_id]["observation"]+"\n"\
+          +user_choices[chat_id]["discussed_with"]+"\n"\
           +user_choices[chat_id]["compliance_status"]
         bot.send_message(chat_id, confirm_msg)
 
@@ -372,7 +385,8 @@ def insp_callback_query(call):
              user_choices[chat_id]["location"],\
              user_choices[chat_id]["observation"],\
              user_choices[chat_id]["compliance_status"],\
-             user_choices[chat_id]["photo"]]])
+             user_choices[chat_id]["photo"],\
+             user_choices[chat_id]["discussed_with"]]])
           bot.send_message(chat_id, "Data Saved Successfuly")
           user_choices[chat_id] = {}
           ask_category(chat_id)
@@ -449,15 +463,14 @@ def handle_photo(message):
       user_choices[chat_id]["photo"] += upload_photo_to_google_drive(file_id, image_path)
     else:
         user_choices[chat_id]["photo"] = upload_photo_to_google_drive(file_id, image_path)
+    bot.send_message(chat_id, "Photo uploaded successfully!")
   except:
       bot.send_message(chat_id, "Error Uploading Photo")
       bot.send_message(chat_id, "Try Again")
   os.remove(image_path)
-  bot.send_message(chat_id, "Photo uploaded successfully!")
   #ask user if he wants to upload more photos
   markup = quick_markup({
       'Yes': {'callback_data': 'Yes'},
       'No': {'callback_data': 'No'}
   }, row_width=2)
   bot.send_message(chat_id, "Upload another photo for the same observation?", reply_markup=markup)
-
