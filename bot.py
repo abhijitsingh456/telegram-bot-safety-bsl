@@ -109,6 +109,7 @@ inspection_categories = ["General","Audio-Visual System", "Central Cable Gallery
 inspection_departments = ["ACVS","BF","CED","CO&CC","CR(E)","CR(M)","CRM","CRM-3","DNW","EL&TC","EMD","ERS","ETL","FORGE SHOP",\
 "GM(E)","GM(M)","GU","HM(E)","HM(M)","HRCF","HSM","I&A","ICF","IMF","M/C SHOP","OG&CBRS","PEB","PFRS","PROJECTS","R&R",\
 "RCL","RED","RGBS","RMHP","RMP","SF & PS","SGP", "SMS-1","SMS-2&CCS","SP","MRD","STORES","STRL SHOP","TBS","TRAFFIC","WMD"]
+next_observation_choices = ["Same Category, Deptt. & Location?","Same Category, Deptt. but Different Location?","Start Fresh"]  #choices user has after they have submitted an observations
 
 meeting_categories=["DLSIC","SAC","SAW", "Contractor Safety Committee"]
 meeting_departments=["BF","CED","CO&CC","CRM","CRM-3","DNW","ELECTRICAL MAINT.","EMD",\
@@ -355,6 +356,13 @@ def handle_photo_callback(call):
       user_submenu_level[chat_id] = TRAIN_SUBMIT_MENU
     show_submit_button(chat_id)
 
+def ask_choice_for_next_observation(chat_id):
+    dict = {}
+    for choice in next_observation_choices:
+      dict[choice] = {'callback_data': choice}
+    markup = quick_markup(dict, row_width=1)
+    bot.send_message(chat_id, "Please choose what you want to do for the next observation", reply_markup=markup)   
+
 #callback handler for inspection categories
 #ensures this by checking if the user_main_menu_level is INSP
 @bot.callback_query_handler(func=lambda call: user_main_menu_level.get(call.message.chat.id) == INSP)
@@ -378,7 +386,6 @@ def insp_callback_query(call):
             ask_for_photo(chat_id)
     elif call.data == 'submit':
         if user_submenu_level[chat_id] == INSP_SUBMIT_MENU:
-          user_submenu_level[chat_id] = INSP_CAT_MENU
           inspection_sheet.append_rows([[user_choices[chat_id]["date"],\
              user_choices[chat_id]["inspection_category"],\
              user_choices[chat_id]["department"],\
@@ -388,9 +395,25 @@ def insp_callback_query(call):
              user_choices[chat_id]["photo"],\
              user_choices[chat_id]["discussed_with"]]])
           bot.send_message(chat_id, "Data Saved Successfuly")
-          user_choices[chat_id] = {}
-          ask_category(chat_id)
-
+          ask_choice_for_next_observation(chat_id)
+    elif call.data in next_observation_choices:
+        if user_submenu_level[chat_id] == INSP_SUBMIT_MENU:
+          if call.data==next_observation_choices[2]: #Start Fresh
+              user_submenu_level[chat_id] = INSP_CAT_MENU
+              user_choices[chat_id] = {}
+              ask_category(chat_id) 
+          elif call.data==next_observation_choices[0] or call.data==next_observation_choices[1]: 
+              user_choices[chat_id].pop('observation')
+              user_choices[chat_id].pop('compliance_status')
+              user_choices[chat_id].pop('photo')
+              user_choices[chat_id].pop('discussed_with')
+              if call.data==next_observation_choices[1]: #New observation with same Category & Deptt. but different Location?
+                  user_choices[chat_id].pop('location')
+                  user_submenu_level[chat_id] = INSP_LOC_MENU
+                  ask_location(chat_id)                  
+              else:
+                  user_submenu_level[chat_id] = INSP_OBS_MENU
+                  ask_observation(chat_id)    
 
 #callback handler for meeting categories
 #ensures this by checking if the user_main_menu_level is MEET
