@@ -118,7 +118,7 @@ meeting_departments=["BF","CED","CO&CC","CRM","CRM-3","DNW","ELECTRICAL MAINT.",
 
 training_categories=["One Day Safety Awareness Training for Non-Exec","Two Day Safety Awareness Training for Exec",\
                      "Half Day Electrical Safety Training"]
-#"Two Day Safety Awareness Training for Exec" has been hardcoded in func handle_date_callback for calculating end_date
+#"Two Day Safety Awareness Training for Exec" has been hardcoded in func handle_date_callback and function handle_date() for calculating end_date
 
 compliance_status = ["Complied","Not Complied", "Good Point"]
 @bot.message_handler(commands=['start'])
@@ -194,7 +194,8 @@ def handle_date_callback(call):
 
 #used to handle the case when someone types a date other than the options provided.
 @bot.message_handler(func=lambda message: user_submenu_level.get(message.chat.id) == INSP_DATE_MENU or\
-                            user_submenu_level.get(message.chat.id) == MEET_DATE_MENU)
+                            user_submenu_level.get(message.chat.id) == MEET_DATE_MENU or\
+                            user_submenu_level.get(message.chat.id) == TRAIN_DATE_MENU)
 def handle_date(message):
   chat_id = message.chat.id
   # Define the regular expression pattern for dd-mm-yyyy format
@@ -204,9 +205,19 @@ def handle_date(message):
     user_choices[chat_id]["date"]=message.text
     if (user_submenu_level.get(chat_id) == INSP_DATE_MENU):
       user_submenu_level[chat_id] = INSP_DEPTT_MENU
+      ask_department(chat_id)
     elif (user_submenu_level.get(chat_id) == MEET_DATE_MENU):
       user_submenu_level[chat_id] = MEET_DEPTT_MENU
-    ask_department(chat_id)
+      ask_department(chat_id)
+    elif (user_submenu_level.get(chat_id) == TRAIN_DATE_MENU):
+      user_submenu_level[chat_id] = TRAIN_PART_MENU
+      user_choices[chat_id]["start_date"]=message.text
+      if user_choices[chat_id]["training_category"]=="Two Day Safety Awareness Training for Exec":
+         date = datetime.strptime(message.text, '%d-%m-%Y')
+         user_choices[chat_id]["end_date"]=(date+timedelta(days=1)).strftime('%d-%m-%Y')
+      else:
+         user_choices[chat_id]["end_date"]=message.text
+      ask_participants(chat_id)
   else:
     bot.send_message(chat_id, "Please enter the date in DD-MM-YYYY format only")
 
@@ -311,7 +322,11 @@ def ask_compliance_status(chat_id):
     bot.send_message(chat_id, "Please enter Compliance Status", reply_markup=markup)
 
 def ask_for_photo(chat_id):
-  bot.send_message(chat_id, "Please upload a photo:")
+  markup = quick_markup({"SKIP":{"callback_data":"SKIP"}}, row_width=1)
+  if "photo" not in user_choices[chat_id]: #if user has uploaded no photo, show a choice to SKIP uploading
+    bot.send_message(chat_id, "Please upload a photo or choose SKIP:", reply_markup=markup) 
+  else:  #if user has already uploaded a photo, show a choice to upload another photo
+    bot.send_message(chat_id, "Please upload a photo:")
 
 def show_submit_button(chat_id):
     markup = quick_markup({"Submit":{'callback_data': "submit"}}, row_width=1)
@@ -339,7 +354,10 @@ def upload_photo_to_google_drive(file_id, image_path):
   photo_link = uploaded_file.get('webViewLink')
   return photo_link
 
-#used to check if the user wants to upload another photo for the same observation or not
+#used to check if the user wants to upload a photo or not
+#and if he has already uploaded a photo does he want to upload
+#another photo for the same observation or not
+#SKIP means No photo at all, Yes means another photo for the same observation, No means no more photos for the same observation
 @bot.callback_query_handler(func=lambda call: user_submenu_level.get(call.message.chat.id) == INSP_PIC_MENU or\
                             user_submenu_level.get(call.message.chat.id) == MEET_PIC_MENU or\
                             user_submenu_level.get(call.message.chat.id) == TRAIN_PIC_MENU)
@@ -347,13 +365,15 @@ def handle_photo_callback(call):
   chat_id = call.message.chat.id
   if call.data == 'Yes':
     ask_for_photo(chat_id)
-  elif call.data == 'No':
+  elif call.data == 'No' or call.data== 'SKIP':
     if (user_submenu_level.get(chat_id) == INSP_PIC_MENU):
       user_submenu_level[chat_id] = INSP_SUBMIT_MENU
     elif (user_submenu_level.get(chat_id) == MEET_PIC_MENU):
       user_submenu_level[chat_id] = MEET_SUBMIT_MENU
     elif (user_submenu_level.get(chat_id) == TRAIN_PIC_MENU):
       user_submenu_level[chat_id] = TRAIN_SUBMIT_MENU
+    if call.data == 'SKIP':
+      user_choices[chat_id]["photo"] = ""
     show_submit_button(chat_id)
 
 def ask_choice_for_next_observation(chat_id):
@@ -361,7 +381,7 @@ def ask_choice_for_next_observation(chat_id):
     for choice in next_observation_choices:
       dict[choice] = {'callback_data': choice}
     markup = quick_markup(dict, row_width=1)
-    bot.send_message(chat_id, "Please choose what you want to do for the next observation", reply_markup=markup)   
+    bot.send_message(chat_id, "Please choose what you want to do for the next observation", reply_markup=markup)
 
 #callback handler for inspection categories
 #ensures this by checking if the user_main_menu_level is INSP
@@ -401,8 +421,8 @@ def insp_callback_query(call):
           if call.data==next_observation_choices[2]: #Start Fresh
               user_submenu_level[chat_id] = INSP_CAT_MENU
               user_choices[chat_id] = {}
-              ask_category(chat_id) 
-          elif call.data==next_observation_choices[0] or call.data==next_observation_choices[1]: 
+              ask_category(chat_id)
+          elif call.data==next_observation_choices[0] or call.data==next_observation_choices[1]:
               user_choices[chat_id].pop('observation')
               user_choices[chat_id].pop('compliance_status')
               user_choices[chat_id].pop('photo')
@@ -410,10 +430,10 @@ def insp_callback_query(call):
               if call.data==next_observation_choices[1]: #New observation with same Category & Deptt. but different Location?
                   user_choices[chat_id].pop('location')
                   user_submenu_level[chat_id] = INSP_LOC_MENU
-                  ask_location(chat_id)                  
+                  ask_location(chat_id)
               else:
                   user_submenu_level[chat_id] = INSP_OBS_MENU
-                  ask_observation(chat_id)    
+                  ask_observation(chat_id)
 
 #callback handler for meeting categories
 #ensures this by checking if the user_main_menu_level is MEET
@@ -464,6 +484,20 @@ def train_callback_query(call):
           bot.send_message(chat_id, "Data Saved Successfuly")
           user_choices[chat_id] = {}
           ask_category(chat_id)
+
+@bot.callback_query_handler(func=lambda call: True)
+def skip_callback_query(call):
+  print ("jrtyjtjtjtjtjuttuktuktukrmryuk,rlry,kryu,rkury,kuy,kuh,ufk,k,i,uyfk,u,u,yu8,y,yfrt,")
+  chat_id = call.message.chat.id
+  if call.data=="SKIP":
+    if (user_submenu_level.get(chat_id) == INSP_PIC_MENU):
+      user_submenu_level[chat_id] = INSP_SUBMIT_MENU
+    elif (user_submenu_level.get(chat_id) == MEET_PIC_MENU):
+      user_submenu_level[chat_id] = MEET_SUBMIT_MENU
+    elif (user_submenu_level.get(chat_id) == TRAIN_PIC_MENU):
+      user_submenu_level[chat_id] = TRAIN_SUBMIT_MENU
+    user_choices[chat_id]["photo"] = ""
+    show_submit_button(chat_id)
 
 
 @bot.message_handler(content_types=['photo'],func=lambda message: user_submenu_level.get(message.chat.id) == INSP_PIC_MENU or\
