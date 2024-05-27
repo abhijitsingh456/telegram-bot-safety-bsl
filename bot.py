@@ -7,6 +7,7 @@ from telebot.util import quick_markup
 from datetime import datetime, timedelta
 import re
 
+from excel_to_insp_report import create_report
 
 #imports for google sheets
 import gspread
@@ -50,6 +51,7 @@ user_submenu_level = {}
 INSP = 0  #inspection
 MEET = 1  #meeting
 TRAIN = 2  #training
+REP = 3 #reports
 
 #Submenu levels for INSP
 INSP_DATE_MENU = 0
@@ -79,6 +81,11 @@ TRAIN_PART_MENU = 19
 TRAIN_PIC_MENU = 20
 TRAIN_SUBMIT_MENU = 21
 
+#Submenu levels for REPORT
+REP_DATE_MENU = 22
+REP_DEPTT_MENU = 23
+REP_SUBMIT_MENU = 24
+
 UPLOADS_DIR = 'uploads'
 
 
@@ -104,7 +111,7 @@ drive_service = build('drive', 'v3', credentials=creds)
 ###############################################################################################
 
 
-main_menu = ["Inspection", "Meeting", "Training"]
+main_menu = ["Inspection", "Meeting", "Training", "Generate Reports"]
 inspection_categories = ["General","Audio-Visual System", "Central Cable Gallery", "Conveyor Gallery", "EOT Crane", "Illumination", "Locomotive", "Rail-Road Level Crossing","Safety Walk"]
 inspection_departments = ["ACVS","BF","CED","CO&CC","CR(E)","CR(M)","CRM","CRM-3","DNW","EL&TC","EMD","ERS","ETL","FORGE SHOP",\
 "GM(E)","GM(M)","GU","HM(E)","HM(M)","HRCF","HSM","I&A","ICF","IMF","M/C SHOP","OG&CBRS","PEB","PFRS","PROJECTS","R&R",\
@@ -151,7 +158,10 @@ def main_callback_query(call):
       user_main_menu_level[chat_id] = TRAIN
       user_submenu_level[chat_id] = TRAIN_CAT_MENU
       ask_category(chat_id)
-
+    elif call.data == "Generate Reports":
+      user_main_menu_level[chat_id] = REP
+      user_submenu_level[chat_id] = REP_DATE_MENU
+      ask_date(chat_id)
 
 # Get today's date
 today = datetime.today()
@@ -169,7 +179,8 @@ def ask_date(chat_id):
 #callbcak handler for date
 @bot.callback_query_handler(func=lambda call: user_submenu_level.get(call.message.chat.id) == INSP_DATE_MENU or \
                             user_submenu_level.get(call.message.chat.id) == MEET_DATE_MENU or\
-                            user_submenu_level.get(call.message.chat.id) == TRAIN_DATE_MENU)
+                            user_submenu_level.get(call.message.chat.id) == TRAIN_DATE_MENU or\
+                            user_submenu_level.get(call.message.chat.id) == REP_DATE_MENU)
 def handle_date_callback(call):
   chat_id = call.message.chat.id
   if call.data == today_date or call.data == yesterday_date:
@@ -190,26 +201,36 @@ def handle_date_callback(call):
       else:
          user_choices[chat_id]["end_date"]=call.data
       ask_participants(chat_id)
+    elif (user_submenu_level.get(call.message.chat.id) == REP_DATE_MENU):
+      user_choices[chat_id]={"date":call.data}
+      user_submenu_level[chat_id] = REP_DEPTT_MENU
+      ask_department(chat_id)
 
 
-#used to handle the case when someone types a date other than the options provided.
 @bot.message_handler(func=lambda message: user_submenu_level.get(message.chat.id) == INSP_DATE_MENU or\
                             user_submenu_level.get(message.chat.id) == MEET_DATE_MENU or\
-                            user_submenu_level.get(message.chat.id) == TRAIN_DATE_MENU)
+                            user_submenu_level.get(message.chat.id) == TRAIN_DATE_MENU  or\
+                            user_submenu_level.get(message.chat.id) == REP_DATE_MENU)
 def handle_date(message):
   chat_id = message.chat.id
   # Define the regular expression pattern for dd-mm-yyyy format
   pattern = r'^\d{2}-\d{2}-\d{4}$'
   # Check if the string matches the pattern
   if re.match(pattern, message.text):
-    user_choices[chat_id]["date"]=message.text
     if (user_submenu_level.get(chat_id) == INSP_DATE_MENU):
+      user_choices[chat_id]["date"]=message.text
       user_submenu_level[chat_id] = INSP_DEPTT_MENU
       ask_department(chat_id)
     elif (user_submenu_level.get(chat_id) == MEET_DATE_MENU):
+      user_choices[chat_id]["date"]=message.text
       user_submenu_level[chat_id] = MEET_DEPTT_MENU
       ask_department(chat_id)
+    elif (user_submenu_level.get(chat_id) == REP_DATE_MENU):
+      user_choices[chat_id]={"date":message.text}
+      user_submenu_level[chat_id] = REP_DEPTT_MENU
+      ask_department(chat_id)
     elif (user_submenu_level.get(chat_id) == TRAIN_DATE_MENU):
+      user_choices[chat_id]["date"]=message.text
       user_submenu_level[chat_id] = TRAIN_PART_MENU
       user_choices[chat_id]["start_date"]=message.text
       if user_choices[chat_id]["training_category"]=="Two Day Safety Awareness Training for Exec":
@@ -243,7 +264,7 @@ def ask_category(chat_id):
 
 def ask_department(chat_id):
     dict = {}
-    if (user_submenu_level[chat_id] == INSP_DEPTT_MENU):
+    if (user_submenu_level[chat_id] == INSP_DEPTT_MENU or user_submenu_level[chat_id] == REP_DEPTT_MENU):
       for department in inspection_departments:
           dict[department] = {'callback_data': department}
       markup = quick_markup(dict, row_width=4)
@@ -324,7 +345,7 @@ def ask_compliance_status(chat_id):
 def ask_for_photo(chat_id):
   markup = quick_markup({"SKIP":{"callback_data":"SKIP"}}, row_width=1)
   if "photo" not in user_choices[chat_id]: #if user has uploaded no photo, show a choice to SKIP uploading
-    bot.send_message(chat_id, "Please upload a photo or choose SKIP:", reply_markup=markup) 
+    bot.send_message(chat_id, "Please upload a photo or choose SKIP:", reply_markup=markup)
   else:  #if user has already uploaded a photo, show a choice to upload another photo
     bot.send_message(chat_id, "Please upload a photo:")
 
@@ -485,9 +506,28 @@ def train_callback_query(call):
           user_choices[chat_id] = {}
           ask_category(chat_id)
 
+#callback handler for generating report
+#ensures this by checking if the user_main_menu_level is REP
+@bot.callback_query_handler(func=lambda call: user_main_menu_level.get(call.message.chat.id) == REP)
+def rep_callback_query(call):
+    chat_id = call.message.chat.id
+    if call.data in inspection_departments:
+        if user_submenu_level[chat_id] == REP_DEPTT_MENU:
+            user_choices[chat_id]["department"]=call.data
+            show_submit_button(chat_id)
+    elif call.data == 'submit':
+        bot.send_message(chat_id, "Please wait a few seconds.")
+        # Path to the file you want to send
+        file_path = user_choices[chat_id]['department'] + "-" + user_choices[chat_id]['date'] + ".docx"
+        create_report(user_choices[chat_id]["date"],user_choices[chat_id]["department"],file_path)
+
+        # Send file
+        with open(file_path, 'rb') as file:
+            bot.send_document(chat_id, file)
+        os.remove(file_path)
+
 @bot.callback_query_handler(func=lambda call: True)
 def skip_callback_query(call):
-  print ("jrtyjtjtjtjtjuttuktuktukrmryuk,rlry,kryu,rkury,kuy,kuh,ufk,k,i,uyfk,u,u,yu8,y,yfrt,")
   chat_id = call.message.chat.id
   if call.data=="SKIP":
     if (user_submenu_level.get(chat_id) == INSP_PIC_MENU):
