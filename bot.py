@@ -18,13 +18,13 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # Your bot token
-BOT_TOKEN = '6318791221:AAHDma5S8IxJ9dBkZYPB0B8Vxjop9TLVVAQ'
+BOT_TOKEN = ''
 
 # Initialize Flask app
 app = Flask(__name__)
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 
-secret = "c04a4995-a7e2-4bf5-b8ab-d7599105d1d1"
+secret = ""
 bot.remove_webhook()
 bot.set_webhook("https://missafetybsl.pythonanywhere.com/{}".format(secret))
 
