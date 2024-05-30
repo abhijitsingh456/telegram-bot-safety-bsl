@@ -18,13 +18,13 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 # Your bot token
-BOT_TOKEN = ''
+BOT_TOKEN = '6318791221:AAHDma5S8IxJ9dBkZYPB0B8Vxjop9TLVVAQ'
 
 # Initialize Flask app
 app = Flask(__name__)
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 
-secret = ""
+secret = "c04a4995-a7e2-4bf5-b8ab-d7599105d1d1"
 bot.remove_webhook()
 bot.set_webhook("https://missafetybsl.pythonanywhere.com/{}".format(secret))
 
@@ -61,30 +61,31 @@ INSP_LOC_MENU = 3
 INSP_OBS_MENU = 4
 INSP_DISCUSS_WITH = 5
 INSP_COMP_MENU = 6
-INSP_PIC_MENU = 7
-INSP_SUBMIT_MENU = 8
+INSP_TARG_DATE_MENU = 7
+INSP_PIC_MENU = 8
+INSP_SUBMIT_MENU = 9
 
 #Submenu levels for MEET
-MEET_DATE_MENU = 9
-MEET_CAT_MENU = 10
-MEET_DEPTT_MENU = 11
-MEET_PART_MENU = 12  #no. of particiapnts
-MEET_CHAIR_MENU = 13  #meet chaired by
-MEET_PIC_MENU = 14
-MEET_SUBMIT_MENU = 15
+MEET_DATE_MENU = 10
+MEET_CAT_MENU = 11
+MEET_DEPTT_MENU = 12
+MEET_PART_MENU = 13  #no. of particiapnts
+MEET_CHAIR_MENU = 14  #meet chaired by
+MEET_PIC_MENU = 15
+MEET_SUBMIT_MENU = 16
 
 #Submenu levels for TRAIN
-TRAIN_CAT_MENU = 16
-TRAIN_DATE_MENU = 17
-TRAIN_DEPTT_MENU = 18   #being skipped for now as current training categories don't belong to a single department
-TRAIN_PART_MENU = 19
-TRAIN_PIC_MENU = 20
-TRAIN_SUBMIT_MENU = 21
+TRAIN_CAT_MENU = 17
+TRAIN_DATE_MENU = 18
+TRAIN_DEPTT_MENU = 19   #being skipped for now as current training categories don't belong to a single department
+TRAIN_PART_MENU = 20
+TRAIN_PIC_MENU = 21
+TRAIN_SUBMIT_MENU = 22
 
 #Submenu levels for REPORT
-REP_DATE_MENU = 22
-REP_DEPTT_MENU = 23
-REP_SUBMIT_MENU = 24
+REP_DATE_MENU = 23
+REP_DEPTT_MENU = 24
+REP_SUBMIT_MENU = 25
 
 UPLOADS_DIR = 'uploads'
 
@@ -342,6 +343,17 @@ def ask_compliance_status(chat_id):
     markup = quick_markup(dict, row_width=3)
     bot.send_message(chat_id, "Please enter Compliance Status", reply_markup=markup)
 
+def ask_target_date(chat_id):
+   bot.send_message(chat_id, "Please enter compliance target date or period")
+
+@bot.message_handler(func=lambda message: user_submenu_level.get(message.chat.id) == INSP_TARG_DATE_MENU)
+def record_target_date(message):  #record compliance target date
+      chat_id = message.chat.id
+      if user_submenu_level[chat_id] == INSP_TARG_DATE_MENU:
+        user_submenu_level[chat_id] = INSP_PIC_MENU
+        user_choices[chat_id]["target_date"]=message.text
+        ask_for_photo(chat_id)
+
 def ask_for_photo(chat_id):
   markup = quick_markup({"SKIP":{"callback_data":"SKIP"}}, row_width=1)
   if "photo" not in user_choices[chat_id]: #if user has uploaded no photo, show a choice to SKIP uploading
@@ -421,10 +433,15 @@ def insp_callback_query(call):
             ask_location(chat_id)
     elif call.data in compliance_status:
         if user_submenu_level[chat_id] == INSP_COMP_MENU:
-            user_submenu_level[chat_id] = INSP_PIC_MENU
             user_choices[chat_id]["compliance_status"]=call.data
             print_choices(call.message)
-            ask_for_photo(chat_id)
+            if user_choices[chat_id]["compliance_status"]=="Not Complied":
+              user_submenu_level[chat_id] = INSP_TARG_DATE_MENU
+              ask_target_date(chat_id)
+            else:
+              user_submenu_level[chat_id] = INSP_PIC_MENU
+              user_choices[chat_id]["target_date"]="NA" #Not Applicable for Good Points or Complied Points
+              ask_for_photo(chat_id)
     elif call.data == 'submit':
         if user_submenu_level[chat_id] == INSP_SUBMIT_MENU:
           inspection_sheet.append_rows([[user_choices[chat_id]["date"],\
@@ -434,7 +451,8 @@ def insp_callback_query(call):
              user_choices[chat_id]["observation"],\
              user_choices[chat_id]["compliance_status"],\
              user_choices[chat_id]["photo"],\
-             user_choices[chat_id]["discussed_with"]]])
+             user_choices[chat_id]["discussed_with"],\
+             user_choices[chat_id]["target_date"]]])
           bot.send_message(chat_id, "Data Saved Successfuly")
           ask_choice_for_next_observation(chat_id)
     elif call.data in next_observation_choices:
@@ -448,6 +466,7 @@ def insp_callback_query(call):
               user_choices[chat_id].pop('compliance_status')
               user_choices[chat_id].pop('photo')
               user_choices[chat_id].pop('discussed_with')
+              user_choices[chat_id].pop('target_date')
               if call.data==next_observation_choices[1]: #New observation with same Category & Deptt. but different Location?
                   user_choices[chat_id].pop('location')
                   user_submenu_level[chat_id] = INSP_LOC_MENU
