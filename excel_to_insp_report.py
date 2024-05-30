@@ -43,28 +43,23 @@ scope = ['https://spreadsheets.google.com/feeds',
 creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
 client = gspread.authorize(creds)
 
-# Open the Google Spreadsheet
-spreadsheet_name = 'Safety-Records'
-inspection_sheet = client.open(spreadsheet_name).worksheet('Inspection')
-meeting_sheet = client.open(spreadsheet_name).worksheet('Meeting')
-training_sheet = client.open(spreadsheet_name).worksheet('Training')
-
-# Get all records in the Google Spreadsheet
-inspection_data = inspection_sheet.get_all_records()
-meeting_data = meeting_sheet.get_all_records()
-training_data = training_sheet.get_all_records()
-
-# Load data into a Pandas DataFrame
-inspection_df = pd.DataFrame(inspection_data)
-meeting_df = pd.DataFrame(meeting_data)
-training_df = pd.DataFrame(meeting_data)
-######################################################################################
+#########################################
 
 
-#date = "23-05-2024"
-#department = "BF"
+
 
 def create_report(date, department, file_path):
+    # Open the Google Spreadsheet
+    spreadsheet_name = 'Safety-Records'
+    inspection_sheet = client.open(spreadsheet_name).worksheet('Inspection')
+
+    # Get all records in the Google Spreadsheet
+    inspection_data = inspection_sheet.get_all_records()
+
+
+    # Load data into a Pandas DataFrame
+    inspection_df = pd.DataFrame(inspection_data)
+
     doc = docx.Document()
 
     para=doc.add_paragraph()
